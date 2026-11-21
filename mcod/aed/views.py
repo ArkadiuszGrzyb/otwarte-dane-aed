@@ -13,9 +13,8 @@ class AedView:
     csrf_exempt = True
 
     def on_get(self, request, response, *args, **kwargs):
-        response.status = falcon.HTTP_200
-        response.content_type = falcon.MEDIA_TEXT
-        response.text = "aed endpoint"
+        aeds = Aed.objects.order_by("numer_seryjny")
+        self._json(response, falcon.HTTP_200, AedSchema(many=True).dump(aeds))
 
     def on_post(self, request, response, *args, **kwargs):
         schema = AedSchema()
