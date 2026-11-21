@@ -1,5 +1,5 @@
 from mcod.academy import views as academy_views
-from mcod.aed import views as aed_views
+from mcod.aed.routes import routes as aed_routes
 from mcod.core.api.utils import views as core_views
 from mcod.core.api.views import MetricsResource
 from mcod.datasets import views as dataset_views
@@ -37,7 +37,7 @@ routes = [
     ("/doc", core_views.SwaggerView()),
     ("/licenses/{name}", dataset_views.LicenseView()),
     # AED
-    ("/aed", aed_views.AedView()),
+    *aed_routes,
     # User
     ("/auth/login", user_views.LoginView()),
     ("/auth/logout", user_views.LogoutView()),
