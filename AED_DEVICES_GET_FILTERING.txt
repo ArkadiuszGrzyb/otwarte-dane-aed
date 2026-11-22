@@ -1,0 +1,131 @@
+GET /aed/devices - HOW RESULTS ARE FILTERED
+==========================================
+Code: mcod/aed/views.py (AedView.on_get), mcod/aed/queries.py (get_valid_aeds),
+      mcod/aed/opening_hours.py (is_open)
+
+
+1. OVERVIEW
+-----------
+Request:   GET /aed/devices
+Params:    none (no query parameters, no pagination - all matching devices are returned)
+Response:  200, JSON array of AED objects (all 26 fields of AedSchema), sorted by numer_seryjny
+           ascending. Empty array [] when nothing matches.
+
+"Now" is the server time in Europe/Warsaw (settings TIME_ZONE), taken once per request and used
+by all filters below.
+
+Filters are applied in this order (each step works on the result of the previous one):
+
+  Step 1  Deduplication          - one (newest) record per numer_seryjny        [database]
+  Step 2  Electrodes and battery - both expiry dates must be later than today   [database]
+  Step 3  Opening hours          - device must be open right now                [Python]
+
+A device is returned only if it passes ALL three steps.
+
+
+2. STEP 1 - ONE RECORD PER SERIAL NUMBER
+----------------------------------------
+For every numer_seryjny only the newest record is kept. "Newest" is decided by:
+
+  1. data_aktualizacji  descending, NULL values last
+  2. revision           descending, NULL values last  (tie-breaker)
+
+Implemented with PostgreSQL DISTINCT ON (numer_seryjny).
+
+Note: numer_seryjny is UNIQUE in the "aed" table, so today every serial number has exactly one
+record and this step removes nothing. It protects the endpoint if duplicates are ever allowed
+(e.g. imports from several sources).
+
+
+3. STEP 2 - VALID ELECTRODES AND BATTERY (R07)
+----------------------------------------------
+Condition (both must be true):
+
+  data_waznosci_elektrod > today
+  data_waznosci_baterii  > today
+
+- "today" = current date in Europe/Warsaw.
+- The comparison is strict: a device whose date equals today is NOT returned
+  (it expires today).
+- A missing (NULL) date fails the check - the device is NOT returned.
+- Applied AFTER step 1: if the newest record of a serial number is expired, the device is
+  dropped; an older, still valid record of the same serial number never takes its place.
+
+Examples (today = 2026-11-22):
+
+  data_waznosci_elektrod  data_waznosci_baterii  returned?
+  ----------------------  ---------------------  ---------
+  2026-12-31              2027-05-01             yes
+  2026-11-23              2026-11-23             yes
+  2026-11-22              2027-05-01             no   (electrodes expire today)
+  2026-11-21              2027-05-01             no   (electrodes expired)
+  2027-01-01              NULL                   no   (battery date unknown)
+
+
+4. STEP 3 - OPEN RIGHT NOW (godziny_dostepnosci)
+------------------------------------------------
+godziny_dostepnosci is read as OSM opening_hours
+(https://wiki.openstreetmap.org/wiki/Key:opening_hours/specification), weekly subset.
+
+Rule:
+- Valid text      -> device returned only if the current day and minute fall inside an opening
+                     interval. Start is inclusive, end is exclusive
+                     (08:00-16:00 means open from 08:00 to 15:59).
+- Empty / NULL    -> no restriction, device is always returned.
+- Invalid or unsupported text -> no restriction, device is always returned
+                     (bad data never hides a defibrillator).
+
+Supported syntax:
+
+  Text                                   Meaning
+  -------------------------------------  ----------------------------------------------------
+  24/7                                   always open
+  Mo-Fr 08:00-16:00                      Monday-Friday 08:00-16:00
+  Mo,We,Fr 08:00-12:00,13:00-17:00       listed days, two intervals per day
+  Sa-Mo 10:00-14:00                      day range wrapping over the week end (Sa, Su, Mo)
+  Fr 20:00-02:00                         past midnight: Fr 20:00-24:00 and Sa 00:00-02:00
+  Mo-Fr 18:00-26:00                      extended hours, same as 18:00-02:00
+  Mo-Fr                                  days only = open all day on those days
+  08:00-20:00                            no days = every day
+  Mo-Su 08:00-20:00; Su off              ";" = later rule replaces earlier one for its days
+                                         (here: closed on Sunday). "closed" = "off".
+  Mo-Fr 08:00-12:00, We 14:00-16:00      "," + day = additional rule, adds hours
+                                         (here: Wednesday also 14:00-16:00)
+
+Day names: Mo Tu We Th Fr Sa Su (case-insensitive). Times: HH:MM, up to 48:00.
+
+Treated as invalid (so the device is ALWAYS returned):
+- public/school holidays (PH, SH), months and dates, week numbers, sunrise/sunset,
+  open-ended "+", "||" fallback rules, comments
+- Polish or free text, e.g. "pn-nd 08:00-20:00", "całodobowo", "w godzinach pracy"
+- malformed values, e.g. "Mo-Fr 08:00", "Mo-Fr 25:00-26:00", "08:00-08:00"
+
+Examples (now = Sunday 2026-11-22 03:30, Europe/Warsaw):
+
+  godziny_dostepnosci                    returned?
+  -------------------------------------  ---------
+  NULL / ""                              yes  (no restriction)
+  24/7                                   yes
+  Mo-Fr 08:00-16:00                      no   (Sunday)
+  Sa 20:00-04:00                         yes  (Saturday night spills into Sunday until 04:00)
+  Mo-Su 08:00-20:00                      no   (03:30 is outside 08:00-20:00)
+  pn-nd 08:00-20:00                      yes  (not valid OSM syntax -> no restriction)
+
+
+5. WHAT IS NOT USED FOR FILTERING
+---------------------------------
+These fields are returned as they are but do NOT affect which devices are listed:
+
+- status            draft records are returned together with published ones
+- stan_urzadzenia   devices marked "niesprawne" (out of order) or "nieznany" are returned
+- dostepnosc        e.g. "ograniczona"; only godziny_dostepnosci decides availability
+- data_przegladu, data_weryfikacji   inspection/verification dates are not checked
+- szerokosc_geograficzna, dlugosc_geograficzna   no location / distance filtering
+
+
+6. RELATION TO THE OPEN DATA EXPORT
+-----------------------------------
+The nightly CSV export (mcod/aed/tasks.py, GET /aed/export) uses steps 1 and 2 exactly as above
+(same function get_valid_aeds), but NOT step 3: a file generated at 04:00 would otherwise drop
+every device that is not open 24/7. The CSV contains godziny_dostepnosci so consumers can apply
+the opening hours themselves.
