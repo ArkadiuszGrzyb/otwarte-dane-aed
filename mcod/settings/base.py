@@ -967,6 +967,8 @@ CELERY_TASK_ROUTES = {
     "mcod.submissions.tasks.generate_submission_unit_report_task": {"queue": "reports"},
     "mcod.submissions.tasks.generate_statistical_report_for_all_submissions_task": {"queue": "reports"},
     "mcod.resources.tasks.check_link_protocol": {"queue": "resources"},
+    "mcod.aed.tasks.create_aed_export_resource_task": {"queue": "resources"},
+    "mcod.aed.tasks.finalize_aed_export_resource_task": {"queue": "resources"},
     "mcod.resources.tasks.create_main_dga_resource_task": {"queue": "resources"},
     "mcod.resources.tasks.delete_es_resource_tabular_data_index": {"queue": "indexing_data"},
     "mcod.resources.tasks.delete_es_resource_tabular_data_indexes_for_organization": {"queue": "indexing_data"},
@@ -1730,6 +1732,32 @@ MAIN_DGA_DATASET_TAGS_NAMES = [
     "akt o zarządzaniu danymi",
     "chronione dane",
 ]
+
+# AED open data export ("otwarte dane") related constants
+AED_EXPORT_DATASET_OWNER_ORGANIZATION_PK = env(
+    "AED_EXPORT_DATASET_OWNER_ORGANIZATION_PK", default=MAIN_DGA_DATASET_OWNER_ORGANIZATION_PK
+)
+AED_EXPORT_DATASET_DEFAULT_TITLE = "Rejestr defibrylatorów AED"
+AED_EXPORT_DATASET_DEFAULT_DESC = (
+    "Wykaz automatycznych defibrylatorów zewnętrznych (AED) z aktualną datą ważności "
+    "elektrod i baterii. Zbiór jest aktualizowany codziennie na podstawie danych "
+    "udostępnianych przez API /aed/devices."
+)
+AED_EXPORT_RESOURCE_DEFAULT_TITLE = "Wykaz defibrylatorów AED"
+AED_EXPORT_RESOURCE_DEFAULT_DESC = (
+    "Wykaz automatycznych defibrylatorów zewnętrznych (AED) wraz z lokalizacją, "
+    "dysponentem i godzinami dostępności (w formacie OSM opening_hours). "
+    "Dla każdego numeru seryjnego udostępniany jest najnowszy rekord; urządzenia z "
+    "przeterminowanymi lub nieznanymi datami ważności elektrod albo baterii są pomijane."
+)
+AED_EXPORT_CSV_FILE_NAME_PREFIX = "Wykaz defibrylatorów AED"
+AED_EXPORT_DATASET_UPDATE_NOTIFICATION_EMAIL = env(
+    "AED_EXPORT_DATASET_UPDATE_NOTIFICATION_EMAIL", default=MAIN_DGA_DATASET_UPDATE_NOTIFICATION_EMAIL
+)
+AED_EXPORT_DATASET_CATEGORIES_TITLES = ["Zdrowie"]
+AED_EXPORT_DATASET_TAGS_NAMES = ["AED", "defibrylatory", "zdrowie"]
+# Delay between creating the new export resource and checking its validation results.
+AED_EXPORT_VALIDATION_CHECK_COUNTDOWN = 60
 
 PASSWORD_RESET_PATH = "/user/reset-password/%s/"
 EMAIL_VALIDATION_PATH = "/user/verify-email/%s/"

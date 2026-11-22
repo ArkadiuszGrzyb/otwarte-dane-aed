@@ -2,14 +2,13 @@ import json
 
 import falcon
 from django.db import IntegrityError, transaction
-from django.db.models import F
 from django.utils import timezone
 from marshmallow import ValidationError
 
 from mcod.aed import opening_hours
-from mcod.aed.models import Aed
+from mcod.aed.models import Aed, AggregatedAEDInfo
+from mcod.aed.queries import get_valid_aeds
 from mcod.aed.schemas import AedSchema
-
 
 
 class AedView:
@@ -17,27 +16,7 @@ class AedView:
 
     def on_get(self, request, response, *args, **kwargs):
         now = timezone.localtime()  # Europe/Warsaw
-
-        # One record per numer_seryjny: PostgreSQL DISTINCT ON keeps the first row of each
-        # group, so order by most recent data_aktualizacji (NULLs last, revision as tie-breaker).
-        latest_ids = (
-            Aed.objects.order_by(
-                "numer_seryjny",
-                F("data_aktualizacji").desc(nulls_last=True),
-                F("revision").desc(nulls_last=True),
-            )
-            .distinct("numer_seryjny")
-            .values("id_aed")
-        )
-        # Only devices with valid electrodes and battery (R07). Applied after deduplication,
-        # so an older record never replaces a newest one that has expired.
-        # Missing (NULL) dates do not pass the check.
-        today = now.date()
-        aeds = Aed.objects.filter(
-            id_aed__in=latest_ids,
-            data_waznosci_elektrod__gt=today,
-            data_waznosci_baterii__gt=today,
-        ).order_by("numer_seryjny")
+        aeds = get_valid_aeds(now.date())
         # Only devices available right now. Valid OSM opening_hours text (e.g. "Mo-Fr 08:00-16:00")
         # is applied; empty or invalid text means no restriction (always open).
         aeds = [aed for aed in aeds if opening_hours.is_open(aed.godziny_dostepnosci, now)]
@@ -121,6 +100,30 @@ class AedDetailView:
             return
 
         _json(response, falcon.HTTP_200, schema.dump(aed))
+
+
+class AedExportView:
+    """Points at the current open data export of GET /aed/devices (dataset and resource on dane.gov.pl)."""
+
+    def on_get(self, request, response, *args, **kwargs):
+        info = AggregatedAEDInfo.objects.select_related("resource", "resource__dataset").first()
+        resource = info.export_resource if info else None
+        if resource is None or not resource.dataset.is_published or resource.dataset.is_removed:
+            raise falcon.HTTPNotFound(description="AED open data export is not available yet.")
+
+        _json(
+            response,
+            falcon.HTTP_200,
+            {
+                "dataset_id": resource.dataset.id,
+                "dataset_slug": resource.dataset.slug,
+                "resource_id": resource.id,
+                "resource_slug": resource.slug,
+                "data_date": resource.data_date.isoformat() if resource.data_date else None,
+                "frontend_url": resource.frontend_absolute_url,
+                "download_url": resource.download_url,
+            },
+        )
 
 
 def _read_json(request):

@@ -6,6 +6,7 @@ PREFIX = "/aed"
 _routes = [
     ("/devices", views.AedView()),
     ("/devices/{id_aed:uuid}", views.AedDetailView()),
+    ("/export", views.AedExportView()),
 ]
 
 routes = [(PREFIX + path, resource) for path, resource in _routes]

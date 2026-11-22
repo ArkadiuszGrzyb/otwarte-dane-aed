@@ -1,6 +1,7 @@
 import uuid
 from enum import Enum
 
+from django.core.exceptions import ValidationError
 from django.core.validators import MinLengthValidator
 from django.db import models
 
@@ -68,3 +69,37 @@ class Aed(models.Model):
 
     def __str__(self):
         return self.numer_seryjny
+
+
+class AggregatedAEDInfo(models.Model):
+    """
+    Singleton pointing at the current open data export of AED devices
+    (the dedicated Dataset and its newest validated Resource).
+    """
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    dataset = models.ForeignKey("datasets.Dataset", on_delete=models.SET_NULL, null=True, related_name="+")
+    resource = models.ForeignKey("resources.Resource", on_delete=models.SET_NULL, null=True, related_name="+")
+
+    class Meta:
+        db_table = "aed_aggregated_info"
+        verbose_name = "AED - eksport do otwartych danych"
+        verbose_name_plural = "AED - eksport do otwartych danych"
+
+    def save(self, *args, **kwargs):
+        if not self.pk and AggregatedAEDInfo.objects.exists():
+            raise ValidationError("There can be only one AggregatedAEDInfo instance")
+        return super().save(*args, **kwargs)
+
+    @property
+    def export_dataset(self):
+        if self.dataset and self.dataset.is_published and not self.dataset.is_removed:
+            return self.dataset
+        return None
+
+    @property
+    def export_resource(self):
+        if self.resource and self.resource.is_published and not self.resource.is_removed:
+            return self.resource
+        return None

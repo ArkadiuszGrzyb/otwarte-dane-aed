@@ -183,6 +183,8 @@ DISCOURSE_FORUM_ENABLED = False
 FIELD_ENCRYPTION_KEYS = ["c2d95c58322ca6ddcf8b0c304c8131f6b515ff5f3a297dcdadeda1a82cb4ec9b"]
 
 MAIN_DGA_DATASET_OWNER_ORGANIZATION_PK = 99
+AED_EXPORT_DATASET_OWNER_ORGANIZATION_PK = 98
+AED_EXPORT_VALIDATION_CHECK_COUNTDOWN = 0
 
 # Set unique cache prefix for each pytest worker to isolate session clearing
 # in a shared cache environment, preventing conflicts between workers.

@@ -90,6 +90,11 @@ def get_beat_schedule(
             "options": default_options,
             "schedule": crontab(minute=30, hour=3),
         },
+        "aed_export_resource_creation": {
+            "task": "mcod.aed.tasks.create_aed_export_resource_task",
+            "options": default_options,
+            "schedule": crontab(minute=0, hour=4),
+        },
         "kibana-statistics": {
             "task": "mcod.counters.tasks.kibana_statistics",
             "options": default_options,

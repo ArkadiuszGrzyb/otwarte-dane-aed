@@ -1,0 +1,2 @@
+id_aed,numer_seryjny,id_zrodlowe,regon_dysponenta,nazwa_dysponenta,nazwa_miejsca,teryt_gminy,miejscowosc,ulica,numer_budynku,kod_pocztowy,szerokosc_geograficzna,dlugosc_geograficzna,opis_lokalizacji,dostepnosc,godziny_dostepnosci,uwagi_dostepu,stan_urzadzenia,data_waznosci_baterii,data_waznosci_elektrod,data_przegladu,data_weryfikacji,zrodlo_danych,data_aktualizacji,status,revision
+512daec8-9e93-49c2-b2be-2fc605961f50,AED-001,,,,,,Warszawa,,,,52.23,21.01,,,Mo-Fr 08:00-16:00,,,2026-12-22,2026-12-22,,,,,,3
