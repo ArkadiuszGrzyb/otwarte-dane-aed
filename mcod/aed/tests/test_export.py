@@ -5,6 +5,7 @@ from unittest import mock
 import pytest
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
+from openpyxl import load_workbook
 
 from mcod.aed.export import (
     AED_EXPORT_COLUMNS,
@@ -91,17 +92,27 @@ def test_create_aed_export_df_empty():
 
 
 @pytest.mark.django_db
-def test_create_aed_export_file_is_utf8_csv(aeds):
+def test_create_aed_export_file_is_xlsx(aeds):
     file = _export_file()
 
-    assert file.name == f"{settings.AED_EXPORT_CSV_FILE_NAME_PREFIX} 20261122.csv"
-    assert file.content_type == "text/csv"
-    lines = file.read().decode("utf-8").splitlines()
-    assert lines[0] == ",".join(AED_EXPORT_COLUMNS)
-    assert len(lines) == 2
-    # NULLs are empty cells and integers are not cast to floats.
-    assert ",3" in lines[1] and "3.0" not in lines[1]
-    assert ",," in lines[1]
+    assert file.name == f"{settings.AED_EXPORT_XLSX_FILE_NAME_PREFIX} 20261122.xlsx"
+    assert file.content_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    workbook = load_workbook(file)
+    sheet = workbook[settings.AED_EXPORT_XLSX_WORKSHEET_NAME]
+    rows = list(sheet.values)
+    assert list(rows[0]) == AED_EXPORT_COLUMNS
+    assert len(rows) == 2
+    assert rows[1][AED_EXPORT_COLUMNS.index("numer_seryjny")] == "AED-001"
+    assert rows[1][AED_EXPORT_COLUMNS.index("revision")] == 3
+    assert rows[1][AED_EXPORT_COLUMNS.index("id_zrodlowe")] is None
+    assert sheet.freeze_panes == "A2"
+
+
+@pytest.mark.django_db
+def test_create_aed_export_file_empty():
+    workbook = load_workbook(_export_file())
+    rows = list(workbook[settings.AED_EXPORT_XLSX_WORKSHEET_NAME].values)
+    assert rows == [tuple(AED_EXPORT_COLUMNS)]
 
 
 @pytest.mark.django_db
@@ -126,7 +137,7 @@ def test_create_aed_export_resource_creates_dataset_and_singleton(aed_export_own
     assert resource.title == settings.AED_EXPORT_RESOURCE_DEFAULT_TITLE
     assert resource.status == "published"
     assert resource.data_date == TODAY
-    assert resource.main_file.name.endswith(".csv")
+    assert resource.main_file.name.endswith(".xlsx")
 
 
 @pytest.mark.django_db
@@ -215,20 +226,20 @@ class TestFinalizeAedExportResourceTask:
 
 @pytest.mark.django_db
 def test_aed_export_resource_passes_resource_validation(aed_export_owner, aeds):
-    """The generated CSV goes through the real file/data/link validation pipeline."""
+    """The generated XLSX goes through the real file/data/link validation pipeline."""
     resource = create_aed_export_resource(_export_file(), TODAY)
     run_on_commit_events()
 
     check_all_resource_validations_status(resource)  # raises if pending or failed
-    assert resource.format == "csv"
+    assert resource.format == "xlsx"
     assert resource.has_table
 
 
 @pytest.mark.django_db
-def test_aed_export_end_to_end_generates_csv_file(aed_export_owner, aeds):
+def test_aed_export_end_to_end_generates_xlsx_file(aed_export_owner, aeds):
     """
-    Full nightly flow: task -> CSV stored as ResourceFile -> real validation -> finalize -> published.
-    The CSV lands in RESOURCES_MEDIA_ROOT/<YYYYMMDD>/ (in tests: test/media/resources/...).
+    Full nightly flow: task -> XLSX stored as ResourceFile -> real validation -> finalize -> published.
+    The XLSX lands in RESOURCES_MEDIA_ROOT/<YYYYMMDD>/ (in tests: test/media/resources/...).
     """
     with mock.patch("mcod.aed.tasks.timezone.localdate", return_value=TODAY), mock.patch.object(
         finalize_aed_export_resource_task, "apply_async"
@@ -245,10 +256,9 @@ def test_aed_export_end_to_end_generates_csv_file(aed_export_owner, aeds):
     assert path.startswith(settings.RESOURCES_MEDIA_ROOT)
     # The resources storage replaces spaces with underscores (and adds a suffix on name collisions).
     file_name = os.path.basename(path)
-    assert file_name.startswith(f"{settings.AED_EXPORT_CSV_FILE_NAME_PREFIX} 20261122".replace(" ", "_"))
-    assert file_name.endswith(".csv")
-    with open(path, encoding="utf-8") as f:
-        lines = f.read().splitlines()
-    assert lines[0] == ",".join(AED_EXPORT_COLUMNS)
-    assert [line.split(",")[1] for line in lines[1:]] == ["AED-001"]
-    print(f"\nAED export CSV: {path}")
+    assert file_name.startswith(f"{settings.AED_EXPORT_XLSX_FILE_NAME_PREFIX} 20261122".replace(" ", "_"))
+    assert file_name.endswith(".xlsx")
+    sheet = load_workbook(path, read_only=True)[settings.AED_EXPORT_XLSX_WORKSHEET_NAME]
+    rows = list(sheet.values)
+    assert list(rows[0]) == AED_EXPORT_COLUMNS
+    assert [row[1] for row in rows[1:]] == ["AED-001"]

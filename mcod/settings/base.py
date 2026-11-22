@@ -1750,7 +1750,8 @@ AED_EXPORT_RESOURCE_DEFAULT_DESC = (
     "Dla każdego numeru seryjnego udostępniany jest najnowszy rekord; urządzenia z "
     "przeterminowanymi lub nieznanymi datami ważności elektrod albo baterii są pomijane."
 )
-AED_EXPORT_CSV_FILE_NAME_PREFIX = "Wykaz defibrylatorów AED"
+AED_EXPORT_XLSX_FILE_NAME_PREFIX = "Wykaz defibrylatorów AED"
+AED_EXPORT_XLSX_WORKSHEET_NAME = "Arkusz 1"
 AED_EXPORT_DATASET_UPDATE_NOTIFICATION_EMAIL = env(
     "AED_EXPORT_DATASET_UPDATE_NOTIFICATION_EMAIL", default=MAIN_DGA_DATASET_UPDATE_NOTIFICATION_EMAIL
 )

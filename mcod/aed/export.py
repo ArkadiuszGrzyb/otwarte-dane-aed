@@ -8,6 +8,7 @@ column constants -> nightly task aggregating into a DataFrame -> new Resource in
 
 import datetime
 import logging
+from io import BytesIO
 from typing import TYPE_CHECKING, List, Optional
 
 import pandas as pd
@@ -91,9 +92,15 @@ def create_aed_export_df(today: datetime.date) -> pd.DataFrame:
 
 
 def create_aed_export_file(df: pd.DataFrame, today: datetime.date) -> SimpleUploadedFile:
-    content: bytes = df.to_csv(index=False).encode("utf-8")
-    file_name = f"{settings.AED_EXPORT_CSV_FILE_NAME_PREFIX} {today:%Y%m%d}.csv"
-    return SimpleUploadedFile(name=file_name, content=content, content_type="text/csv")
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="xlsxwriter", options={"strings_to_formulas": False, "strings_to_urls": False}) as writer:
+        df.to_excel(writer, index=False, sheet_name=settings.AED_EXPORT_XLSX_WORKSHEET_NAME, freeze_panes=(1, 0))
+    file_name = f"{settings.AED_EXPORT_XLSX_FILE_NAME_PREFIX} {today:%Y%m%d}.xlsx"
+    return SimpleUploadedFile(
+        name=file_name,
+        content=output.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 
 def create_aed_export_dataset() -> "Dataset":
