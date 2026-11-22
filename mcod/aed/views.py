@@ -6,14 +6,18 @@ from django.db.models import F
 from django.utils import timezone
 from marshmallow import ValidationError
 
+from mcod.aed import opening_hours
 from mcod.aed.models import Aed
 from mcod.aed.schemas import AedSchema
+
 
 
 class AedView:
     csrf_exempt = True
 
     def on_get(self, request, response, *args, **kwargs):
+        now = timezone.localtime()  # Europe/Warsaw
+
         # One record per numer_seryjny: PostgreSQL DISTINCT ON keeps the first row of each
         # group, so order by most recent data_aktualizacji (NULLs last, revision as tie-breaker).
         latest_ids = (
@@ -28,12 +32,15 @@ class AedView:
         # Only devices with valid electrodes and battery (R07). Applied after deduplication,
         # so an older record never replaces a newest one that has expired.
         # Missing (NULL) dates do not pass the check.
-        today = timezone.localdate()
+        today = now.date()
         aeds = Aed.objects.filter(
             id_aed__in=latest_ids,
             data_waznosci_elektrod__gt=today,
             data_waznosci_baterii__gt=today,
         ).order_by("numer_seryjny")
+        # Only devices available right now. Valid OSM opening_hours text (e.g. "Mo-Fr 08:00-16:00")
+        # is applied; empty or invalid text means no restriction (always open).
+        aeds = [aed for aed in aeds if opening_hours.is_open(aed.godziny_dostepnosci, now)]
         self._json(response, falcon.HTTP_200, AedSchema(many=True).dump(aeds))
 
     def on_post(self, request, response, *args, **kwargs):
