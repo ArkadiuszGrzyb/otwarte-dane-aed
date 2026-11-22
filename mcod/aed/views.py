@@ -2,6 +2,7 @@ import json
 
 import falcon
 from django.db import IntegrityError, transaction
+from django.db.models import F
 from django.utils import timezone
 from marshmallow import ValidationError
 
@@ -13,7 +14,13 @@ class AedView:
     csrf_exempt = True
 
     def on_get(self, request, response, *args, **kwargs):
-        aeds = Aed.objects.order_by("numer_seryjny")
+        # One record per numer_seryjny: PostgreSQL DISTINCT ON keeps the first row of each
+        # group, so order by most recent data_aktualizacji (NULLs last, revision as tie-breaker).
+        aeds = Aed.objects.order_by(
+            "numer_seryjny",
+            F("data_aktualizacji").desc(nulls_last=True),
+            F("revision").desc(nulls_last=True),
+        ).distinct("numer_seryjny")
         self._json(response, falcon.HTTP_200, AedSchema(many=True).dump(aeds))
 
     def on_post(self, request, response, *args, **kwargs):
