@@ -16,11 +16,24 @@ class AedView:
     def on_get(self, request, response, *args, **kwargs):
         # One record per numer_seryjny: PostgreSQL DISTINCT ON keeps the first row of each
         # group, so order by most recent data_aktualizacji (NULLs last, revision as tie-breaker).
-        aeds = Aed.objects.order_by(
-            "numer_seryjny",
-            F("data_aktualizacji").desc(nulls_last=True),
-            F("revision").desc(nulls_last=True),
-        ).distinct("numer_seryjny")
+        latest_ids = (
+            Aed.objects.order_by(
+                "numer_seryjny",
+                F("data_aktualizacji").desc(nulls_last=True),
+                F("revision").desc(nulls_last=True),
+            )
+            .distinct("numer_seryjny")
+            .values("id_aed")
+        )
+        # Only devices with valid electrodes and battery (R07). Applied after deduplication,
+        # so an older record never replaces a newest one that has expired.
+        # Missing (NULL) dates do not pass the check.
+        today = timezone.localdate()
+        aeds = Aed.objects.filter(
+            id_aed__in=latest_ids,
+            data_waznosci_elektrod__gt=today,
+            data_waznosci_baterii__gt=today,
+        ).order_by("numer_seryjny")
         self._json(response, falcon.HTTP_200, AedSchema(many=True).dump(aeds))
 
     def on_post(self, request, response, *args, **kwargs):
