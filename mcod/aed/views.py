@@ -33,7 +33,8 @@ class AedView:
             self._json(response, falcon.HTTP_422, {"errors": err.messages})
             return
 
-        data.setdefault("data_aktualizacji", timezone.now())
+        # data_aktualizacji is managed by the server: always the moment of this write.
+        data["data_aktualizacji"] = timezone.now()
         data.setdefault("revision", 0)
 
         if Aed.objects.filter(numer_seryjny=data["numer_seryjny"]).exists():
@@ -74,7 +75,8 @@ class AedDetailView:
 
         # revision is managed by the server: ignore any client-supplied value.
         data.pop("revision", None)
-        data.setdefault("data_aktualizacji", timezone.now())
+        # data_aktualizacji is managed by the server: always the moment of this write.
+        data["data_aktualizacji"] = timezone.now()
 
         if Aed.objects.filter(numer_seryjny=data["numer_seryjny"]).exclude(id_aed=id_aed).exists():
             _json(response, falcon.HTTP_409, {"errors": {"numer_seryjny": ["AED with this serial number already exists."]}})
